@@ -1,0 +1,29 @@
+[Unit]
+Description=Orange Pi Zero3 DLNA renderer (gmediarender + GStreamer)
+After=network-online.target sound.target
+Wants=network-online.target
+# 等 wlan0 拿到 IP，避免 libupnp 在无接口时失败
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 30); do ip -4 addr show wlan0 2>/dev/null | grep -q "inet " && exit 0; sleep 1; done; exit 1'
+
+[Service]
+Type=simple
+Environment=GST_PLUGIN_FEATURE_RANK=v4l2slh264dec:0,v4l2h264dec:0,avdec_h264:300
+ExecStartPre=/usr/bin/modetest -M sun4i-drm -s 51@49:1280x720
+User=orangepi
+Group=orangepi
+SupplementaryGroups=video audio
+ExecStart=/usr/bin/gmediarender -f "OrangePi-Zero3 TV" \
+  --gstout-videopipe "videoconvert n-threads=4 ! videoscale add-borders=true ! video/x-raw,width=1280,height=720,pixel-aspect-ratio=1/1,format=BGRx ! fbdevsink" \
+  --gstout-audiosink alsasink \
+   \
+  --gstout-audiodevice "hw:CARD=ahubhdmi,DEV=0" \
+  --logfile=/tmp/gmr.log
+Restart=always
+RestartSec=3
+TimeoutStopSec=5
+KillSignal=SIGKILL
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

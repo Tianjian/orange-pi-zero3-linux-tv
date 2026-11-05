@@ -1,0 +1,19 @@
+[Unit]
+Description=Orange Pi Zero3 DLNA hardware-decode bridge
+After=network-online.target opiz3-renderer.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=orangepi
+Group=orangepi
+SupplementaryGroups=video audio
+ExecStartPre=/usr/bin/modetest -M sun4i-drm -s 51@49:1280x720
+ExecStart=/usr/bin/python3 /home/orangepi/opiz3-bridge.py
+Restart=always
+RestartSec=2
+TimeoutStopSec=5
+KillSignal=SIGKILL
+
+[Install]
+WantedBy=multi-user.target

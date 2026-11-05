@@ -1,0 +1,13 @@
+Orange Pi Zero3 Linux DLNA TV
+Copyright (c) 2026 Tianjian
+
+This repository is an independent community project. It is not affiliated
+with, endorsed by, or sponsored by Shenzhen Xunlong Software (Orange Pi) or
+Allwinner Technology.
+
+"Orange Pi", "Allwinner" and other names are trademarks of their respective
+owners. Vendor manuals, schematics, images, and kernel source trees are not
+included in this repository; see docs for references.
+
+`kernel/patches/` contains modifications to Linux kernel source and is
+licensed under GPL-2.0 (see kernel/patches/README.md), not the MIT license.

@@ -1,0 +1,258 @@
+diff --git a/drivers/gpu/drm/sun4i/sun8i_csc.c b/drivers/gpu/drm/sun4i/sun8i_csc.c
+index 703c55ba7..704d90efb 100644
+--- a/drivers/gpu/drm/sun4i/sun8i_csc.c
++++ b/drivers/gpu/drm/sun4i/sun8i_csc.c
+@@ -109,10 +109,7 @@ static const u32 yuv2rgb_de3[2][3][12] = {
+ 
+ static u32 sun8i_csc_base(struct sun8i_mixer *mixer, int layer)
+ {
+-	if (mixer->cfg->is_de33)
+-		return sun8i_channel_base(mixer, layer) - 0x200;
+-	else
+-		return ccsc_base[mixer->cfg->ccsc][layer];
++	return ccsc_base[mixer->cfg->ccsc][layer];
+ }
+ 
+ static void sun8i_csc_set_coefficients(struct regmap *map, u32 base,
+@@ -186,39 +183,70 @@ static void sun8i_de3_ccsc_set_coefficients(struct regmap *map, int layer,
+ 	}
+ }
+ 
+-static void sun8i_de33_ccsc_set_coefficients(struct sun8i_mixer *mixer,
+-					     int layer,
+-					     enum sun8i_csc_mode mode,
+-					     enum drm_color_encoding encoding,
+-					     enum drm_color_range range)
++/* extract constant from high word and invert sign if necessary */
++static u32 sun8i_de33_ccsc_get_constant(u32 value)
+ {
+-	const u32 *table;
+-	u32 base, addr;
+-	int i;
++	value >>= 16;
+ 
+-	base = sun8i_csc_base(mixer, layer);
+-	table = yuv2rgb_de3[range][encoding];
++	if (value & BIT(15))
++		return 0x400 - (value & 0x3ff);
+ 
+-	regmap_write(mixer->engine.regs, base + 4, table[3] >> 16);
+-	regmap_write(mixer->engine.regs, base + 8, table[7] >> 16);
+-	regmap_write(mixer->engine.regs, base + 12, table[11] >> 16);
++	return value;
++}
+ 
+-	for (i = 0; i < 12; i++) {
+-		u32 val = table[i];
++static void sun8i_de33_convert_table(const u32 *src, u32 *dst)
++{
++	dst[0] = sun8i_de33_ccsc_get_constant(src[3]);
++	dst[1] = sun8i_de33_ccsc_get_constant(src[7]);
++	dst[2] = sun8i_de33_ccsc_get_constant(src[11]);
++	memcpy(&dst[3], src, sizeof(u32) * 12);
++	dst[6] &= 0xffff;
++	dst[10] &= 0xffff;
++	dst[14] &= 0xffff;
++}
+ 
+-		addr = SUN8I_CSC_COEFF(base, i);
+-		if (mode == SUN8I_CSC_MODE_YVU2RGB) {
+-			if ((i & 3) == 1)
+-				addr = SUN8I_CSC_COEFF(base, i + 1);
+-			else if ((i & 3) == 2)
+-				addr = SUN8I_CSC_COEFF(base, i - 1);
+-		}
++static void sun8i_de33_ccsc_setup(struct regmap *map, int layer,
++				  enum sun8i_csc_mode mode,
++				  enum drm_color_encoding encoding,
++				  enum drm_color_range range)
++{
++	u32 addr, val, base, csc[15];
++	const u32 *table;
++	int i;
+ 
+-		if (i == 3 || i == 7 || i == 11)
+-			val &= 0xffff;
++	table = yuv2rgb_de3[range][encoding];
++	base = DE33_CCSC_BASE + layer * DE33_CH_SIZE;
+ 
+-		regmap_write(mixer->engine.regs, addr, val);
++	switch (mode) {
++	case SUN8I_CSC_MODE_OFF:
++		val = 0;
++		break;
++	case SUN8I_CSC_MODE_YUV2RGB:
++		val = SUN8I_CSC_CTRL_EN;
++		sun8i_de33_convert_table(table, csc);
++		regmap_bulk_write(map, SUN50I_CSC_COEFF(base, 0), csc, 15);
++		break;
++	case SUN8I_CSC_MODE_YVU2RGB:
++		val = SUN8I_CSC_CTRL_EN;
++		sun8i_de33_convert_table(table, csc);
++		for (i = 0; i < 15; i++) {
++			addr = SUN50I_CSC_COEFF(base, i);
++			if (i > 3) {
++				if (((i - 3) & 3) == 1)
++					addr = SUN50I_CSC_COEFF(base, i + 1);
++				else if (((i - 3) & 3) == 2)
++					addr = SUN50I_CSC_COEFF(base, i - 1);
++			}
++			regmap_write(map, addr, csc[i]);
++		}
++		break;
++	default:
++		val = 0;
++		DRM_WARN("Wrong CSC mode specified.\n");
++		return;
+ 	}
++
++	regmap_write(map, SUN8I_CSC_CTRL(base), val);
+ }
+ 
+ static void sun8i_csc_enable(struct regmap *map, u32 base, bool enable)
+@@ -262,8 +290,8 @@ void sun8i_csc_set_ccsc_coefficients(struct sun8i_mixer *mixer, int layer,
+ 	}
+ 
+ 	if (mixer->cfg->is_de33) {
+-		sun8i_de33_ccsc_set_coefficients(mixer, layer, mode,
+-						 encoding, range);
++		sun8i_de33_ccsc_setup(mixer->engine.regs, layer, mode,
++				      encoding, range);
+ 		return;
+ 	}
+ 
+@@ -277,6 +305,9 @@ void sun8i_csc_enable_ccsc(struct sun8i_mixer *mixer, int layer, bool enable)
+ {
+ 	u32 base;
+ 
++	if (mixer->cfg->is_de33)
++		return;
++
+ 	if (mixer->cfg->is_de3) {
+ 		sun8i_de3_ccsc_enable(mixer->engine.regs, layer, enable);
+ 		return;
+diff --git a/drivers/gpu/drm/sun4i/sun8i_csc.h b/drivers/gpu/drm/sun4i/sun8i_csc.h
+index 828b86fd0..78e18a11e 100644
+--- a/drivers/gpu/drm/sun4i/sun8i_csc.h
++++ b/drivers/gpu/drm/sun4i/sun8i_csc.h
+@@ -17,6 +17,12 @@ struct sun8i_mixer;
+ #define CCSC10_OFFSET 0xA0000
+ #define CCSC11_OFFSET 0xF0000
+ 
++#define DE33_CCSC_BASE 0x800
++#define DE33_CH_SIZE 0x20000
++
++#define SUN50I_CSC_COEFF(base, i)	((base) + 0x04 + 4 * (i))
++#define SUN50I_CSC_ALPHA(base)		((base) + 0x40)
++
+ #define SUN8I_CSC_CTRL(base)		((base) + 0x0)
+ #define SUN8I_CSC_COEFF(base, i)	((base) + 0x10 + 4 * (i))
+ 
+diff --git a/drivers/gpu/drm/sun4i/sun8i_vi_layer.c b/drivers/gpu/drm/sun4i/sun8i_vi_layer.c
+index 49a9ea919..4cbffb5e7 100644
+--- a/drivers/gpu/drm/sun4i/sun8i_vi_layer.c
++++ b/drivers/gpu/drm/sun4i/sun8i_vi_layer.c
+@@ -76,7 +76,7 @@ static void sun8i_vi_layer_update_alpha(struct sun8i_mixer *mixer, int channel,
+ 
+ 	ch_base = sun8i_channel_base(mixer, channel);
+ 
+-	if (mixer->cfg->is_de3) {
++	if (mixer->cfg->is_de3 || mixer->cfg->is_de33) {
+ 		mask = SUN50I_MIXER_CHAN_VI_LAYER_ATTR_ALPHA_MASK |
+ 		       SUN50I_MIXER_CHAN_VI_LAYER_ATTR_ALPHA_MODE_MASK;
+ 		val = SUN50I_MIXER_CHAN_VI_LAYER_ATTR_ALPHA
+@@ -558,7 +558,7 @@ struct sun8i_vi_layer *sun8i_vi_layer_init_one(struct drm_device *drm,
+ 	if (!layer)
+ 		return ERR_PTR(-ENOMEM);
+ 
+-	if (mixer->cfg->is_de3) {
++	if (mixer->cfg->is_de3 || mixer->cfg->is_de33) {
+ 		formats = sun8i_vi_layer_de3_formats;
+ 		format_count = ARRAY_SIZE(sun8i_vi_layer_de3_formats);
+ 	} else {
+@@ -582,7 +582,7 @@ struct sun8i_vi_layer *sun8i_vi_layer_init_one(struct drm_device *drm,
+ 
+ 	plane_cnt = mixer->cfg->ui_num + mixer->cfg->vi_num;
+ 
+-	if (mixer->cfg->vi_num == 1 || mixer->cfg->is_de3) {
++	if (mixer->cfg->vi_num == 1 || mixer->cfg->is_de3 || mixer->cfg->is_de33) {
+ 		ret = drm_plane_create_alpha_property(&layer->plane);
+ 		if (ret) {
+ 			dev_err(drm->dev, "Couldn't add alpha property\n");
+@@ -599,7 +599,7 @@ struct sun8i_vi_layer *sun8i_vi_layer_init_one(struct drm_device *drm,
+ 
+ 	supported_encodings = BIT(DRM_COLOR_YCBCR_BT601) |
+ 			      BIT(DRM_COLOR_YCBCR_BT709);
+-	if (mixer->cfg->is_de3)
++	if (mixer->cfg->is_de3 || mixer->cfg->is_de33)
+ 		supported_encodings |= BIT(DRM_COLOR_YCBCR_BT2020);
+ 
+ 	supported_ranges = BIT(DRM_COLOR_YCBCR_LIMITED_RANGE) |
+diff --git a/drivers/gpu/drm/sun4i/sun8i_vi_scaler.c b/drivers/gpu/drm/sun4i/sun8i_vi_scaler.c
+index 3f7afa8d3..6a3979b49 100644
+--- a/drivers/gpu/drm/sun4i/sun8i_vi_scaler.c
++++ b/drivers/gpu/drm/sun4i/sun8i_vi_scaler.c
+@@ -893,20 +893,28 @@ static void sun8i_vi_scaler_set_coeff(struct regmap *map, u32 base,
+ 			     lan3coefftab32_left[offset + i]);
+ 		regmap_write(map, SUN8I_SCALER_VSU_YHCOEFF1(base, i),
+ 			     lan3coefftab32_right[offset + i]);
++	}
++
++	offset = sun8i_vi_scaler_coef_index(vstep) *
++			SUN8I_VI_SCALER_COEFF_COUNT;
++	for (i = 0; i < SUN8I_VI_SCALER_COEFF_COUNT; i++)
++		regmap_write(map, SUN8I_SCALER_VSU_YVCOEFF(base, i),
++			     lan2coefftab32[offset + i]);
++
++	offset = sun8i_vi_scaler_coef_index(hstep / format->hsub) *
++			SUN8I_VI_SCALER_COEFF_COUNT;
++	for (i = 0; i < SUN8I_VI_SCALER_COEFF_COUNT; i++) {
+ 		regmap_write(map, SUN8I_SCALER_VSU_CHCOEFF0(base, i),
+ 			     ch_left[offset + i]);
+ 		regmap_write(map, SUN8I_SCALER_VSU_CHCOEFF1(base, i),
+ 			     ch_right[offset + i]);
+ 	}
+ 
+-	offset = sun8i_vi_scaler_coef_index(hstep) *
++	offset = sun8i_vi_scaler_coef_index(vstep / format->vsub) *
+ 			SUN8I_VI_SCALER_COEFF_COUNT;
+-	for (i = 0; i < SUN8I_VI_SCALER_COEFF_COUNT; i++) {
+-		regmap_write(map, SUN8I_SCALER_VSU_YVCOEFF(base, i),
+-			     lan2coefftab32[offset + i]);
++	for (i = 0; i < SUN8I_VI_SCALER_COEFF_COUNT; i++)
+ 		regmap_write(map, SUN8I_SCALER_VSU_CVCOEFF(base, i),
+ 			     cy[offset + i]);
+-	}
+ }
+ 
+ void sun8i_vi_scaler_enable(struct sun8i_mixer *mixer, int layer, bool enable)
+@@ -958,7 +966,7 @@ void sun8i_vi_scaler_setup(struct sun8i_mixer *mixer, int layer,
+ 		cvphase = vphase;
+ 	}
+ 
+-	if (mixer->cfg->is_de3) {
++	if (mixer->cfg->is_de3 || mixer->cfg->is_de33) {
+ 		u32 val;
+ 
+ 		if (format->hsub == 1 && format->vsub == 1)
+@@ -968,6 +976,8 @@ void sun8i_vi_scaler_setup(struct sun8i_mixer *mixer, int layer,
+ 
+ 		regmap_write(mixer->engine.regs,
+ 			     SUN50I_SCALER_VSU_SCALE_MODE(base), val);
++		regmap_write(mixer->engine.regs,
++			     SUN50I_SCALER_VSU_GLB_ALPHA(base), 0xff);
+ 	}
+ 
+ 	regmap_write(mixer->engine.regs,
+diff --git a/drivers/gpu/drm/sun4i/sun8i_vi_scaler.h b/drivers/gpu/drm/sun4i/sun8i_vi_scaler.h
+index 68f6593b3..f09113ccd 100644
+--- a/drivers/gpu/drm/sun4i/sun8i_vi_scaler.h
++++ b/drivers/gpu/drm/sun4i/sun8i_vi_scaler.h
+@@ -34,6 +34,7 @@
+ #define SUN50I_SCALER_VSU_EDSCL_CTRL(base)		((base) + 0x28)
+ #define SUN50I_SCALER_VSU_ANGLE_THR(base)		((base) + 0x2c)
+ #define SUN8I_SCALER_VSU_OUTSIZE(base)		((base) + 0x40)
++#define SUN50I_SCALER_VSU_GLB_ALPHA(base)	((base) + 0x44)
+ #define SUN8I_SCALER_VSU_YINSIZE(base)		((base) + 0x80)
+ #define SUN8I_SCALER_VSU_YHSTEP(base)		((base) + 0x88)
+ #define SUN8I_SCALER_VSU_YVSTEP(base)		((base) + 0x8c)

@@ -1,0 +1,37 @@
+=== H618 6.1 kernel build summary (2026-11-02T15:56:31+08:00) ===
+source: orange-pi-6.1-sun50iw9 @ 71144529b0334d1488624c41d0d3ba0cb03dd4c1 2024-07-10
+toolchain: aarch64-none-linux-gnu-gcc (GNU Toolchain for the Arm Architecture 11.2-2022.02 (arm-11.14)) 11.2.1 20220111
+config: linux-6.1-sun50iw9-next.config -> olddefconfig
+command: make -j8 ARCH=arm64 CROSS_COMPILE=... LOCALVERSION=-sun50iw9 Image modules dtbs
+
+real	24m41.593s
+user	134m8.534s
+sys	16m10.365s
+
+-rw-rw-r-- 1 toby toby 22M 11月  2 15:54 kernel/out/6.1/Image
+-rw-rw-r-- 1 toby toby 39K 11月  2 15:54 kernel/out/6.1/sun50i-h618-orangepi-zero3.dtb
+modules: 3034 .ko, 136M
+
+11b832f847390b6480ea3d150ba48717b9956d789698625ed5a5bd920770d119  kernel/out/6.1/Image
+427b00ecdc9f6c28f60aeaa74b8a541377ead4dbfdc63a9428c109e11a1695a4  kernel/out/6.1/sun50i-h618-orangepi-zero3.dtb
+
+version: 6.1.31-sun50iw9
+
+=== key modules ===
+drivers/media/rc/sunxi-cir.ko
+drivers/net/wireless/uwe5622/unisocwifi/sprdwl_ng.ko
+drivers/net/wireless/uwe5622/unisocwcn/uwe5622_bsp_sdio.ko
+drivers/net/wireless/uwe5622/tty-sdio/sprdbt_tty.ko
+drivers/net/ethernet/stmicro/stmmac/dwmac-sun8i.ko
+drivers/net/phy/motorcomm.ko
+drivers/gpu/drm/panfrost/panfrost.ko
+drivers/staging/media/sunxi/cedrus/sunxi-cedrus.ko
+drivers/pwm/pwm-sun4i.ko
+
+=== config audit ===
+
+必选项缺失: 0   模块/可选缺失: 0   风险项: 1
+
+=== verify ===
+== 汇总 ==
+  PASS=21 FAIL=0 WARN=0

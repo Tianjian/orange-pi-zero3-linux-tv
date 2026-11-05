@@ -1,0 +1,92 @@
+# Orange Pi Zero 3 (Allwinner H618) 外设最小配置片段
+# 目标内核: orangepi-build next / linux-orangepi orange-pi-6.1-sun50iw9（厂商 6.1）
+#
+# 用法（在已有官方 .config 上核对，或从 arm64 defconfig 起合并）:
+#   scripts/kconfig/merge_config.sh -m .config kernel/config/opiz3-h618-6.1-vendor.fragment
+#   make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- olddefconfig
+#
+# 说明: 官方 .config 已包含全部条目；本片段用于“从零/裁剪”时快速对齐 Zero3 外设。
+# 标 (vendor) 的符号只存在于厂商 6.1 树，不是主线符号。
+
+# --- 平台 / 时钟 / 引脚 ---
+CONFIG_ARM64=y
+CONFIG_ARCH_SUNXI=y
+CONFIG_SUN50I_H616_CCU=y
+CONFIG_PINCTRL_SUNXI=y
+CONFIG_PINCTRL_SUN50I_H616=y
+CONFIG_GPIOLIB=y
+
+# --- 存储: TF(SDC0) + 16Mbit SPI NOR(SPI0) ---
+CONFIG_MMC=y
+CONFIG_MMC_SUNXI=y
+CONFIG_MMC_BLOCK=y
+CONFIG_MTD=y
+CONFIG_MTD_SPI_NOR=y
+CONFIG_SPI=y
+CONFIG_SPI_SUN6I=y
+CONFIG_SPI_SPIDEV=y          # 26pin SPI1 用户态；SDK 用 dtbo 打开 spidev1.1
+
+# --- 26pin 总线 ---
+CONFIG_I2C=y
+CONFIG_I2C_MV64XXX=y
+CONFIG_I2C_CHARDEV=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_DW=y
+CONFIG_SERIAL_8250_CONSOLE=y   # UART0 调试控制台 115200n8
+CONFIG_PWM=y
+CONFIG_PWM_SUN4I=y
+
+# --- 红外（13pin 扩展板）---
+CONFIG_RC_CORE=y
+CONFIG_IR_SUNXI=y
+
+# --- 音频（13pin LINEOUT）---
+CONFIG_SND=y
+CONFIG_SND_SOC=y
+CONFIG_SND_SUN50IW9_CODEC=y          # (vendor) H616/H618 模拟 codec
+CONFIG_SND_SOC_SUNXI_AHUB=y          # (vendor) AHUB/DAM
+CONFIG_SND_SOC_SUNXI_MACH=y          # (vendor) simple card
+
+# --- 显示 / GPU ---
+CONFIG_DRM=y
+CONFIG_DRM_SUN4I=y
+CONFIG_DRM_SUN8I_DW_HDMI=y
+CONFIG_DRM_PANFROST=m                # G31 驱动；用户态 Mesa 另配
+
+# --- USB ---
+CONFIG_USB=y
+CONFIG_USB_EHCI_HCD=y
+CONFIG_USB_EHCI_HCD_PLATFORM=y
+CONFIG_USB_OHCI_HCD=y
+CONFIG_USB_OHCI_HCD_PLATFORM=y
+CONFIG_USB_GADGET=y
+CONFIG_USB_CONFIGFS=m
+
+# --- 千兆网 (YT8531C, RGMII) ---
+CONFIG_NET=y
+CONFIG_STMMAC_ETH=y
+CONFIG_DWMAC_SUN8I=y
+CONFIG_MOTORCOMM_PHY=y
+
+# --- 电源 / 温度 / 看门狗 / RTC / LED / eFuse ---
+CONFIG_MFD_AXP20X_RSB=y
+CONFIG_REGULATOR_AXP20X=y
+CONFIG_SUNXI_RSB=y
+CONFIG_THERMAL=y
+CONFIG_SUN8I_THERMAL=y
+CONFIG_WATCHDOG=y
+CONFIG_SUNXI_WATCHDOG=y
+CONFIG_RTC_CLASS=y
+CONFIG_RTC_DRV_SUN6I=y
+CONFIG_LEDS_GPIO=y
+CONFIG_LEDS_TRIGGER_HEARTBEAT=y
+CONFIG_NVMEM=y
+CONFIG_NVMEM_SUNXI_SID=y
+
+# --- CPU 调频 / 根文件系统基础 ---
+CONFIG_CPU_FREQ=y
+CONFIG_CPUFREQ_DT=y
+CONFIG_CPU_FREQ_GOV_ONDEMAND=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_BLK_DEV_INITRD=y

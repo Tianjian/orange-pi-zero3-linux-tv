@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.o
+*.ko
+*.img
+*.7z
+*.pdf
+*.log
